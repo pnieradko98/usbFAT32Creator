@@ -63,6 +63,28 @@ Co robi pipeline:
 
 Dla tagów `v*` (np. `v1.0.2`) ten sam ZIP trafia także do GitHub Releases.
 
+## Gotowe ZIP-y dla macOS i Linux
+
+Workflow: `.github/workflows/unix-zips.yml`
+
+Pipeline buduje i publikuje:
+- `usb-fat32-creator-macos-portable` (artifact ZIP z aplikacją `.app`),
+- `usb-fat32-creator-linux-portable` (artifact ZIP z binarką i skryptem startowym).
+
+Dla tagów `v*` oba ZIP-y trafiają także do GitHub Releases jako assety.
+
+### Jak pobrać gotowe paczki
+
+1. Wejdź w zakładkę Actions.
+2. Uruchom workflow `unix-zips-build`.
+3. Po zakończeniu pobierz artifacty:
+	- `usb-fat32-creator-macos-portable`,
+	- `usb-fat32-creator-linux-portable`.
+
+### Uwaga o Linux
+
+Paczka Linux zawiera gotową binarkę i skrypt uruchomieniowy, ale na części dystrybucji może wymagać obecnego systemowego runtime Qt6.
+
 ### Opcja B: ręcznie na Windows
 
 Po zbudowaniu `Release` dołącz zależności Qt:

@@ -1,0 +1,195 @@
+name: unix-zips-build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos-zip:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt 6 (macOS)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.6.3
+          host: mac
+          target: desktop
+          arch: clang_64
+
+      - name: Configure CMake
+        shell: bash
+        run: |
+          set -euo pipefail
+          QT6_CONFIG=$(find "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.." "$RUNNER_WORKSPACE" -type f -name Qt6Config.cmake | head -n 1)
+          if [[ -z "${QT6_CONFIG:-}" ]]; then
+            echo "Qt6Config.cmake not found" >&2
+            exit 1
+          fi
+          QT6_DIR=$(dirname "$QT6_CONFIG")
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DQt6_DIR="$QT6_DIR"
+
+      - name: Build Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build --config Release --target usb_fat32_creator
+
+      - name: Create macOS zip package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          APP_DIR="dist/USB FAT32 Creator.app"
+          mkdir -p "$APP_DIR/Contents/MacOS"
+          mkdir -p "$APP_DIR/Contents/Resources"
+
+          cp build/usb_fat32_creator "$APP_DIR/Contents/MacOS/usb_fat32_creator"
+
+          cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key>
+            <string>USB FAT32 Creator</string>
+            <key>CFBundleDisplayName</key>
+            <string>USB FAT32 Creator</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.usbfat32.creator</string>
+            <key>CFBundleExecutable</key>
+            <string>usb_fat32_creator</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>CFBundleVersion</key>
+            <string>1.0.0</string>
+            <key>CFBundleShortVersionString</key>
+            <string>1.0.0</string>
+          </dict>
+          </plist>
+          PLIST
+
+          MACDEPLOYQT=$(find "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.." "$RUNNER_WORKSPACE" -type f -name macdeployqt | head -n 1)
+          if [[ -z "${MACDEPLOYQT:-}" ]]; then
+            echo "macdeployqt not found" >&2
+            exit 1
+          fi
+
+          "$MACDEPLOYQT" "$APP_DIR"
+
+          ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "dist/usb_fat32_creator_macos_portable.zip"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: usb-fat32-creator-macos-portable
+          path: dist/usb_fat32_creator_macos_portable.zip
+          if-no-files-found: error
+
+      - name: Publish macOS release asset
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="$GITHUB_REF_NAME"
+          ASSET="dist/usb_fat32_creator_macos_portable.zip"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes "Automatyczne paczki binarne" || true
+          gh release upload "$TAG" "$ASSET" --clobber
+
+  build-linux-zip:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt 6 (Linux)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.6.3
+          host: linux
+          target: desktop
+          arch: gcc_64
+
+      - name: Configure CMake
+        shell: bash
+        run: |
+          set -euo pipefail
+          QT6_CONFIG=$(find "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.." "$RUNNER_WORKSPACE" -type f -name Qt6Config.cmake | head -n 1)
+          if [[ -z "${QT6_CONFIG:-}" ]]; then
+            echo "Qt6Config.cmake not found" >&2
+            exit 1
+          fi
+          QT6_DIR=$(dirname "$QT6_CONFIG")
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DQt6_DIR="$QT6_DIR"
+
+      - name: Build Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build --config Release --target usb_fat32_creator
+
+      - name: Create Linux zip package
+        shell: bash
+        run: |
+          set -euo pipefail
+          PACKAGE_DIR="dist/usb_fat32_creator_linux"
+          mkdir -p "$PACKAGE_DIR"
+
+          cp build/usb_fat32_creator "$PACKAGE_DIR/usb_fat32_creator"
+          chmod +x "$PACKAGE_DIR/usb_fat32_creator"
+
+          cat > "$PACKAGE_DIR/run.sh" << 'RUNSH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
+          exec "$SCRIPT_DIR/usb_fat32_creator" "$@"
+          RUNSH
+          chmod +x "$PACKAGE_DIR/run.sh"
+
+          cat > "$PACKAGE_DIR/README_PORTABLE.txt" << 'TXT'
+          USB FAT32 Creator - Linux package
+
+          Jak uruchomic:
+          1. Rozpakuj ZIP.
+          2. Uruchom ./run.sh lub ./usb_fat32_creator.
+
+          Uwaga:
+          - W niektorych dystrybucjach moze byc wymagany systemowy runtime Qt6.
+          - Operacje partycjonowania sa nieodwracalne i usuwaja dane.
+          TXT
+
+          (cd dist && zip -r "usb_fat32_creator_linux_portable.zip" "usb_fat32_creator_linux")
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: usb-fat32-creator-linux-portable
+          path: dist/usb_fat32_creator_linux_portable.zip
+          if-no-files-found: error
+
+      - name: Publish Linux release asset
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="$GITHUB_REF_NAME"
+          ASSET="dist/usb_fat32_creator_linux_portable.zip"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes "Automatyczne paczki binarne" || true
+          gh release upload "$TAG" "$ASSET" --clobber
