@@ -63,17 +63,18 @@ jobs:
             throw "windeployqt failed with exit code $LASTEXITCODE"
           }
 
-          @"
-USB FAT32 Creator - Portable (Windows)
-
-Jak uruchomic:
-1. Rozpakuj ZIP do dowolnego folderu.
-2. Uruchom usb_fat32_creator.exe jako Administrator.
-3. Najpierw uzyj przycisku Testuj i trybu dry-run.
-
-Uwaga:
-- Operacje partycjonowania sa nieodwracalne i usuwaja dane.
-"@ | Set-Content -Path (Join-Path $appDir "README_PORTABLE.txt") -Encoding ASCII
+          $portableReadme = @(
+            "USB FAT32 Creator - Portable (Windows)",
+            "",
+            "Jak uruchomic:",
+            "1. Rozpakuj ZIP do dowolnego folderu.",
+            "2. Uruchom usb_fat32_creator.exe jako Administrator.",
+            "3. Najpierw uzyj przycisku Testuj i trybu dry-run.",
+            "",
+            "Uwaga:",
+            "- Operacje partycjonowania sa nieodwracalne i usuwaja dane."
+          )
+          Set-Content -Path (Join-Path $appDir "README_PORTABLE.txt") -Value $portableReadme -Encoding ASCII
 
           $zipPath = Join-Path $PWD "dist/usb_fat32_creator_windows_portable.zip"
           if (Test-Path $zipPath) {
