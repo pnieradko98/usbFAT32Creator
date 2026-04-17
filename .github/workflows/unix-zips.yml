@@ -57,6 +57,7 @@ jobs:
           mkdir -p "$APP_DIR/Contents/Resources"
 
           cp build/usb_fat32_creator "$APP_DIR/Contents/MacOS/usb_fat32_creator"
+          chmod +x "$APP_DIR/Contents/MacOS/usb_fat32_creator"
 
           cat > "$APP_DIR/Contents/Info.plist" << 'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
@@ -88,6 +89,24 @@ jobs:
           fi
 
           "$MACDEPLOYQT" "$APP_DIR"
+
+          # Ensure bundle has a valid ad-hoc signature after deployment.
+          codesign --force --deep --sign - "$APP_DIR"
+          codesign --verify --deep --strict --verbose=2 "$APP_DIR"
+
+          cat > "$APP_DIR/Contents/Resources/README_PORTABLE.txt" << 'TXT'
+          USB FAT32 Creator - macOS package
+
+          Jak uruchomic:
+          1. Rozpakuj ZIP.
+          2. Otworz "USB FAT32 Creator.app".
+
+          Jesli macOS pokazuje komunikat, ze aplikacja jest uszkodzona:
+          xattr -dr com.apple.quarantine "/sciezka/do/USB FAT32 Creator.app"
+
+          Uwaga:
+          - Operacje partycjonowania sa nieodwracalne i usuwaja dane.
+          TXT
 
           ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "dist/usb_fat32_creator_macos_portable.zip"
 
