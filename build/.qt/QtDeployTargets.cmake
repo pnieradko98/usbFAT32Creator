@@ -1,0 +1,2 @@
+set(__QT_DEPLOY_TARGET_usb_fat32_creator_FILE /Users/mac/USB FAT32 Creator/build/usb_fat32_creator)
+set(__QT_DEPLOY_TARGET_usb_fat32_creator_TYPE EXECUTABLE)
