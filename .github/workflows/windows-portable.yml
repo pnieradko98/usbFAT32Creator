@@ -20,21 +20,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Qt 6 (MSVC)
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: 6.6.3
-          host: windows
-          target: desktop
-          arch: win64_msvc2022_64
+      - name: Install Qt 6 (MSVC) via aqt
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip aqtinstall
+          python -m aqt install-qt windows desktop 6.6.3 win64_msvc2019_64 -O "$env:GITHUB_WORKSPACE/qt"
 
       - name: Configure CMake
         shell: pwsh
         run: |
-          if (-not $env:Qt6_DIR) {
-            throw "Qt6_DIR is not set by install-qt-action"
+          $qtDir = Join-Path $env:GITHUB_WORKSPACE "qt/6.6.3/msvc2019_64/lib/cmake/Qt6"
+          if (-not (Test-Path $qtDir)) {
+            throw "Qt6_DIR not found: $qtDir"
           }
-          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DQt6_DIR="$env:Qt6_DIR"
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DQt6_DIR="$qtDir"
 
       - name: Build Release
         shell: pwsh
@@ -53,7 +52,7 @@ jobs:
           }
           Copy-Item $exeSrc $appDir -Force
 
-          $qtBinDir = Resolve-Path (Join-Path $env:Qt6_DIR "../../../bin")
+          $qtBinDir = Join-Path $env:GITHUB_WORKSPACE "qt/6.6.3/msvc2019_64/bin"
           $windeployqt = Join-Path $qtBinDir "windeployqt.exe"
           if (-not (Test-Path $windeployqt)) {
             throw "windeployqt not found: $windeployqt"
@@ -91,6 +90,15 @@ Uwaga:
 
       - name: Publish GitHub Release asset
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/usb_fat32_creator_windows_portable.zip
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $asset = "dist/usb_fat32_creator_windows_portable.zip"
+          gh release view $tag > $null 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag $asset --title $tag --notes "Automatyczny release portable build"
+          } else {
+            gh release upload $tag $asset --clobber
+          }
