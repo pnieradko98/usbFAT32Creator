@@ -31,6 +31,25 @@ To narzędzie operuje na fizycznych dyskach. Traktuj je jak narzędzie administr
 - Kompilator C++17
 - Qt6 Widgets
 
+## Pobieranie
+
+Gotowe wersje portable są publikowane w GitHub Releases:
+
+- Windows: ZIP z `usb_fat32_creator.exe` i bibliotekami Qt
+- macOS: ZIP z `USB FAT32 Creator.app`
+- Linux: ZIP z binarką i skryptem `run.sh`
+
+Pobieranie:
+
+- Releases: https://github.com/pnieradko98/usbFAT32Creator/releases
+- Najnowsze wydanie: https://github.com/pnieradko98/usbFAT32Creator/releases/latest
+
+Aktualne paczki z release `v1.0.4`:
+
+- Windows: `usb_fat32_creator_windows_portable.zip`
+- macOS: `usb_fat32_creator_macos_portable.zip`
+- Linux: `usb_fat32_creator_linux_portable.zip`
+
 ## Szybki start
 
 ### macOS / Linux
