@@ -70,8 +70,15 @@ jobs:
           }
           Copy-Item $exeSrc $appDir -Force
 
-          $qtBaseDir = Resolve-Path (Join-Path $qtDir "../../../")
-          $qtBinDir = Join-Path $qtBaseDir "bin"
+          if ($env:QT_ROOT_DIR -and (Test-Path $env:QT_ROOT_DIR)) {
+            $qtBinDir = Join-Path $env:QT_ROOT_DIR "bin"
+          } else {
+            $qtConfig = Get-ChildItem -Path (Join-Path $env:GITHUB_WORKSPACE "..\Qt") -Filter "Qt6Config.cmake" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if (-not $qtConfig) {
+              throw "Cannot detect Qt installation for windeployqt"
+            }
+            $qtBinDir = Join-Path (Resolve-Path (Join-Path $qtConfig.Directory.FullName "../../..")) "bin"
+          }
           $windeployqt = Join-Path $qtBinDir "windeployqt.exe"
           if (-not (Test-Path $windeployqt)) {
             throw "windeployqt not found: $windeployqt"
