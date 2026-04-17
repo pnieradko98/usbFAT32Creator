@@ -29,10 +29,12 @@ jobs:
       - name: Configure CMake
         shell: pwsh
         run: |
-          $qtDir = Join-Path $env:GITHUB_WORKSPACE "qt/6.6.3/msvc2019_64/lib/cmake/Qt6"
-          if (-not (Test-Path $qtDir)) {
-            throw "Qt6_DIR not found: $qtDir"
+          $qtConfig = Get-ChildItem -Path (Join-Path $env:GITHUB_WORKSPACE "qt") -Filter "Qt6Config.cmake" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $qtConfig) {
+            throw "Qt6Config.cmake not found under $env:GITHUB_WORKSPACE/qt"
           }
+          $qtDir = $qtConfig.Directory.FullName
+          Write-Host "Detected Qt6_DIR: $qtDir"
           cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DQt6_DIR="$qtDir"
 
       - name: Build Release
@@ -52,7 +54,8 @@ jobs:
           }
           Copy-Item $exeSrc $appDir -Force
 
-          $qtBinDir = Join-Path $env:GITHUB_WORKSPACE "qt/6.6.3/msvc2019_64/bin"
+          $qtBaseDir = Resolve-Path (Join-Path $qtDir "../../..")
+          $qtBinDir = Join-Path $qtBaseDir "bin"
           $windeployqt = Join-Path $qtBinDir "windeployqt.exe"
           if (-not (Test-Path $windeployqt)) {
             throw "windeployqt not found: $windeployqt"
