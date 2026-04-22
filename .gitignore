@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+
+# Build outputs
+build/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Qt generated
+*_autogen/
+*.qrc.depends
+
+# IDE
+.vscode/
+.idea/
