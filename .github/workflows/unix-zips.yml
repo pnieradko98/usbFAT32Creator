@@ -214,17 +214,23 @@ jobs:
       - name: Build AppImage
         shell: bash
         env:
-          QMAKE: ${{ env.Qt6_DIR }}/bin/qmake
+          APPIMAGE_EXTRACT_AND_RUN: "1"
           QML_SOURCES_PATHS: .
           EXTRA_QT_PLUGINS: xcbglintegrations
         run: |
           set -euo pipefail
-          export QMAKE="$(find "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.." "$RUNNER_WORKSPACE" -type f -name qmake6 -o -name qmake | head -n 1)"
-          ./linuxdeploy.AppImage \
+          # Znajdź qmake6 lub qmake z zainstalowanego Qt
+          QMAKE_BIN="$(find "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.." "$RUNNER_WORKSPACE" /home -type f \( -name qmake6 -o -name qmake \) 2>/dev/null | grep -v '/usr/bin' | head -n 1)"
+          if [[ -z "${QMAKE_BIN:-}" ]]; then
+            QMAKE_BIN="$(command -v qmake6 || command -v qmake)"
+          fi
+          echo "Używam qmake: $QMAKE_BIN"
+          export QMAKE="$QMAKE_BIN"
+
+          APPIMAGE_EXTRACT_AND_RUN=1 ./linuxdeploy.AppImage \
             --appdir AppDir \
             --plugin qt \
             --output appimage
-          # linuxdeploy generuje plik *.AppImage w bieżącym katalogu
           ls -lh *.AppImage
 
       - name: Rename and move AppImage
