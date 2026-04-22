@@ -10,6 +10,15 @@ struct PhysicalDisk {
     quint64 sizeBytes = 0;
     bool removable = false;
     bool likelyUsb = false;
+    bool isSystem = false;
+};
+
+struct DiskPartInfo {
+    QString name;
+    quint64 sizeBytes = 0;
+    QString fsType;
+    QString label;
+    QString mountPoint; // drive letter on Windows (e.g. "C:"), path on Linux/macOS
 };
 
 struct PartitionSpec {

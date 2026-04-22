@@ -27,7 +27,7 @@ MainWindow::MainWindow() {
 }
 
 void MainWindow::setupUi() {
-    setWindowTitle("USB FAT32 Creator v1.1.0");
+    setWindowTitle("USB FAT32 Creator v1.2.0");
     resize(980, 640);
 
     auto* central = new QWidget(this);
@@ -49,17 +49,27 @@ void MainWindow::setupUi() {
     m_dryRun->setChecked(true);
     top->addWidget(m_dryRun);
 
-    m_refreshBtn = new QPushButton("Odśwież");
-    m_planBtn = new QPushButton("Zbuduj plan");
-    m_testBtn = new QPushButton("Testuj");
-    m_execBtn = new QPushButton("Wykonaj");
+    m_refreshBtn    = new QPushButton("Odśwież");
+    m_partitionsBtn = new QPushButton("Pokaż partycje");
+    m_planBtn       = new QPushButton("Zbuduj plan");
+    m_testBtn       = new QPushButton("Testuj");
+    m_execBtn       = new QPushButton("Wykonaj");
 
     top->addWidget(m_refreshBtn);
+    top->addWidget(m_partitionsBtn);
     top->addWidget(m_planBtn);
     top->addWidget(m_testBtn);
     top->addWidget(m_execBtn);
 
     root->addLayout(top);
+
+    m_progress = new QProgressBar();
+    m_progress->setRange(0, 1);
+    m_progress->setValue(0);
+    m_progress->setTextVisible(false);
+    m_progress->setMaximumHeight(6);
+    m_progress->setVisible(false);
+    root->addWidget(m_progress);
 
     m_output = new QPlainTextEdit();
     m_output->setReadOnly(true);
@@ -67,10 +77,11 @@ void MainWindow::setupUi() {
 
     setCentralWidget(central);
 
-    connect(m_refreshBtn, &QPushButton::clicked, this, &MainWindow::refreshDevices);
-    connect(m_planBtn, &QPushButton::clicked, this, &MainWindow::buildPlan);
-    connect(m_testBtn, &QPushButton::clicked, this, &MainWindow::testPlan);
-    connect(m_execBtn, &QPushButton::clicked, this, &MainWindow::executePlan);
+    connect(m_refreshBtn,    &QPushButton::clicked, this, &MainWindow::refreshDevices);
+    connect(m_partitionsBtn, &QPushButton::clicked, this, &MainWindow::showCurrentPartitions);
+    connect(m_planBtn,       &QPushButton::clicked, this, &MainWindow::buildPlan);
+    connect(m_testBtn,       &QPushButton::clicked, this, &MainWindow::testPlan);
+    connect(m_execBtn,       &QPushButton::clicked, this, &MainWindow::executePlan);
 }
 
 void MainWindow::refreshDevices() {
@@ -78,16 +89,66 @@ void MainWindow::refreshDevices() {
     m_deviceCombo->clear();
 
     for (const auto& d : m_disks) {
-        const QString row = QString("%1 | %2 | %3 | %4")
+        const QString sysTag = d.isSystem ? " [DYSK SYSTEMOWY]" : "";
+        const QString row = QString("%1 | %2 | %3 | %4%5")
             .arg(d.devicePath)
             .arg(d.model.isEmpty() ? "(unknown model)" : d.model)
             .arg(CommandBuilder::prettySize(d.sizeBytes))
-            .arg(d.likelyUsb ? "USB/removable" : "internal?");
+            .arg(d.likelyUsb ? "USB/removable" : "internal?")
+            .arg(sysTag);
         m_deviceCombo->addItem(row);
     }
 
     m_output->appendPlainText("[" + QDateTime::currentDateTime().toString() + "] znaleziono urządzeń: "
         + QString::number(m_disks.size()));
+}
+
+void MainWindow::setUiBusy(bool busy) {
+    m_refreshBtn->setEnabled(!busy);
+    m_partitionsBtn->setEnabled(!busy);
+    m_planBtn->setEnabled(!busy);
+    m_testBtn->setEnabled(!busy);
+    m_execBtn->setEnabled(!busy);
+    m_deviceCombo->setEnabled(!busy);
+    m_virtualCount->setEnabled(!busy);
+    m_dryRun->setEnabled(!busy);
+    m_progress->setVisible(busy);
+    if (!busy) {
+        m_progress->setRange(0, 1);
+        m_progress->setValue(1);
+    }
+}
+
+bool MainWindow::isSystemDiskSelected() const {
+    const int idx = m_deviceCombo->currentIndex();
+    if (idx < 0 || idx >= static_cast<int>(m_disks.size())) return false;
+    return m_disks[static_cast<size_t>(idx)].isSystem;
+}
+
+void MainWindow::showCurrentPartitions() {
+    PhysicalDisk disk;
+    if (!hasSelectedDisk(disk)) {
+        QMessageBox::warning(this, "Brak urządzenia", "Wybierz urządzenie fizyczne.");
+        return;
+    }
+
+    setUiBusy(true);
+    m_output->appendPlainText("\n=== AKTUALNE PARTYCJE na " + disk.devicePath + " ===");
+
+    const auto parts = m_diskManager.listPartitions(disk.devicePath);
+    if (parts.empty()) {
+        m_output->appendPlainText("(brak partycji lub brak dostępu)");
+    } else {
+        for (const auto& p : parts) {
+            const QString mp = p.mountPoint.isEmpty() ? "(bez litery/punktu)" : p.mountPoint;
+            m_output->appendPlainText(QString("  %1 | %2 | %3 | %4")
+                .arg(p.name)
+                .arg(p.fsType.isEmpty() ? "?" : p.fsType)
+                .arg(CommandBuilder::prettySize(p.sizeBytes))
+                .arg(mp));
+        }
+    }
+    setUiBusy(false);
 }
 
 bool MainWindow::hasSelectedDisk(PhysicalDisk& outDisk) const {
@@ -274,6 +335,17 @@ void MainWindow::executePlan() {
         return;
     }
 
+    // ── 1. Blokada dysku systemowego ─────────────────────────────────────────
+    if (disk.isSystem) {
+        QMessageBox::critical(this, "Blokada – dysk systemowy",
+            QString("Wybrany dysk (%1) jest dyskiem systemowym!\n\n"
+                    "Formatowanie dysku z systemem operacyjnym grozi "
+                    "całkowitą utratą systemu.\n\n"
+                    "Operacja jest zablokowana.")
+            .arg(disk.devicePath));
+        return;
+    }
+
     if (m_lastPartitionPlan.partitions.empty() || m_lastCommandPlan.commands.empty()) {
         QMessageBox::information(this, "Brak planu", "Najpierw kliknij 'Zbuduj plan'.");
         return;
@@ -294,72 +366,116 @@ void MainWindow::executePlan() {
         return;
     }
 
-    const auto answer = QMessageBox::warning(
-        this,
-        "Potwierdzenie",
-        QString("Uwaga: zostanie sformatowane urządzenie %1.\n"
-            "Wszystkie dane na tym nośniku zostaną bezpowrotnie usunięte.\n"
-            "Ta operacja jest nieodwracalna.\n\n"
-            "Czy na pewno kontynuować?")
-            .arg(disk.devicePath),
-        QMessageBox::Yes | QMessageBox::No,
-        QMessageBox::No);
-    if (answer != QMessageBox::Yes) {
-        return;
+    // ── 2. Ostrzeżenie z listą plików ────────────────────────────────────────
+    {
+        m_output->appendPlainText("[INFO] Sprawdzam zawartość dysku...");
+        const QStringList files = m_diskManager.sampleDiskFiles(disk.devicePath, 25);
+        QString fileListMsg;
+        if (!files.isEmpty()) {
+            fileListMsg = "\n\nZnaleziono dane na dysku:\n";
+            for (const QString& f : files) {
+                fileListMsg += "  " + f + "\n";
+            }
+            if (files.size() >= 25) fileListMsg += "  ...(i więcej)\n";
+        }
+
+        const auto answer = QMessageBox::warning(
+            this,
+            "Potwierdzenie – utrata danych",
+            QString("UWAGA: zostanie sformatowane urządzenie %1.\n"
+                    "Wszystkie dane na tym nośniku zostaną bezpowrotnie usunięte.\n"
+                    "Ta operacja jest nieodwracalna.%2\n\n"
+                    "Czy na pewno kontynuować?")
+                .arg(disk.devicePath)
+                .arg(fileListMsg),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No);
+        if (answer != QMessageBox::Yes) return;
     }
 
+    // ── 3. Zapis skryptu i uruchomienie asynchroniczne ───────────────────────
 #if defined(Q_OS_WIN)
+    const QString scriptPath = QDir::tempPath() + "/diskpart_script.txt";
     {
-        const QString scriptPath = QDir::tempPath() + "/diskpart_script.txt";
-        QFile scriptFile(scriptPath);
-        if (!scriptFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QFile f(scriptPath);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
             m_output->appendPlainText("[ERR] Nie można utworzyć pliku tymczasowego: " + scriptPath);
             return;
         }
-        QTextStream stream(&scriptFile);
-        for (const QString& cmd : m_lastCommandPlan.commands) {
-            stream << cmd << "\n";
-        }
-        scriptFile.close();
+        QTextStream s(&f);
+        for (const QString& cmd : m_lastCommandPlan.commands) s << cmd << "\n";
+    }
+    m_output->appendPlainText("[INFO] Skrypt diskpart: " + scriptPath);
+    m_output->appendPlainText("[RUN] diskpart /s " + scriptPath);
 
-        m_output->appendPlainText("[INFO] Skrypt diskpart zapisany do: " + scriptPath);
-        m_output->appendPlainText("[RUN] diskpart /s " + scriptPath);
-
-        QProcess proc;
-        proc.start("diskpart", {"/s", scriptPath});
-        if (!proc.waitForFinished(300000)) {
-            m_output->appendPlainText("[ERR] timeout - diskpart nie zakończył się w ciągu 5 minut.");
-            proc.kill();
+    auto* proc = new QProcess(this);
+    connect(proc, &QProcess::readyReadStandardOutput, this, [this, proc]() {
+        const QString txt = QString::fromUtf8(proc->readAllStandardOutput()).trimmed();
+        if (!txt.isEmpty()) m_output->appendPlainText(txt);
+    });
+    connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+        this, [this, proc, scriptPath](int exitCode, QProcess::ExitStatus) {
+            const QString stdErr = QString::fromUtf8(proc->readAllStandardError()).trimmed();
+            if (!stdErr.isEmpty()) m_output->appendPlainText("[ERR] " + stdErr);
+            m_output->appendPlainText(exitCode == 0
+                ? "[OK] Formatowanie zakończone pomyślnie."
+                : "[ERR] Diskpart zakończył się z kodem: " + QString::number(exitCode));
             QFile::remove(scriptPath);
-            return;
-        }
-        const QString stdOut = QString::fromUtf8(proc.readAllStandardOutput());
-        const QString stdErr = QString::fromUtf8(proc.readAllStandardError());
-        if (!stdOut.isEmpty()) {
-            m_output->appendPlainText(stdOut);
-        }
-        if (!stdErr.isEmpty()) {
-            m_output->appendPlainText("[ERR] " + stdErr);
-        }
+            setUiBusy(false);
+            proc->deleteLater();
+        });
+
+    setUiBusy(true);
+    m_progress->setRange(0, 0); // indeterminate
+    proc->start("diskpart", {"/s", scriptPath});
+    if (!proc->waitForStarted(5000)) {
+        m_output->appendPlainText("[ERR] Nie można uruchomić diskpart.");
         QFile::remove(scriptPath);
+        setUiBusy(false);
+        proc->deleteLater();
     }
 #else
-    for (const QString& commandLine : m_lastCommandPlan.commands) {
-        m_output->appendPlainText("[RUN] " + commandLine);
-        QProcess p;
-        p.start("/bin/sh", {"-c", commandLine});
-        if (!p.waitForFinished(-1)) {
-            m_output->appendPlainText("[ERR] timeout");
-            continue;
+    // Zapisz wszystkie komendy jako skrypt powłoki
+    const QString scriptPath = QDir::tempPath() + "/usb_fat32_script.sh";
+    {
+        QFile f(scriptPath);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            m_output->appendPlainText("[ERR] Nie można utworzyć skryptu: " + scriptPath);
+            return;
         }
-        const QString stdOut = QString::fromUtf8(p.readAllStandardOutput());
-        const QString stdErr = QString::fromUtf8(p.readAllStandardError());
-        if (!stdOut.isEmpty()) {
-            m_output->appendPlainText(stdOut);
-        }
-        if (!stdErr.isEmpty()) {
-            m_output->appendPlainText(stdErr);
-        }
+        QTextStream s(&f);
+        s << "#!/bin/sh\nset -e\n";
+        for (const QString& cmd : m_lastCommandPlan.commands) s << cmd << "\n";
+    }
+    m_output->appendPlainText("[RUN] /bin/sh " + scriptPath);
+
+    auto* proc = new QProcess(this);
+    connect(proc, &QProcess::readyReadStandardOutput, this, [this, proc]() {
+        const QString txt = QString::fromUtf8(proc->readAllStandardOutput()).trimmed();
+        if (!txt.isEmpty()) m_output->appendPlainText(txt);
+    });
+    connect(proc, &QProcess::readyReadStandardError, this, [this, proc]() {
+        const QString txt = QString::fromUtf8(proc->readAllStandardError()).trimmed();
+        if (!txt.isEmpty()) m_output->appendPlainText("[ERR] " + txt);
+    });
+    connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+        this, [this, proc, scriptPath](int exitCode, QProcess::ExitStatus) {
+            m_output->appendPlainText(exitCode == 0
+                ? "[OK] Formatowanie zakończone pomyślnie."
+                : "[ERR] Skrypt zakończył się z kodem: " + QString::number(exitCode));
+            QFile::remove(scriptPath);
+            setUiBusy(false);
+            proc->deleteLater();
+        });
+
+    setUiBusy(true);
+    m_progress->setRange(0, 0); // indeterminate
+    proc->start("/bin/sh", {scriptPath});
+    if (!proc->waitForStarted(5000)) {
+        m_output->appendPlainText("[ERR] Nie można uruchomić skryptu.");
+        QFile::remove(scriptPath);
+        setUiBusy(false);
+        proc->deleteLater();
     }
 #endif
 }

@@ -6,6 +6,8 @@
 #include <QComboBox>
 #include <QMainWindow>
 #include <QPlainTextEdit>
+#include <QProcess>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QSpinBox>
 
@@ -20,9 +22,12 @@ private slots:
     void buildPlan();
     void testPlan();
     void executePlan();
+    void showCurrentPartitions();
 
 private:
     void setupUi();
+    void setUiBusy(bool busy);
+    bool isSystemDiskSelected() const;
     bool hasSelectedDisk(PhysicalDisk& outDisk) const;
     PartitionPlan buildCurrentPartitionPlan() const;
     QStringList validatePlan(const PhysicalDisk& disk, const PartitionPlan& plan) const;
@@ -32,15 +37,17 @@ private:
     DiskManager m_diskManager;
     std::vector<PhysicalDisk> m_disks;
 
-    QComboBox* m_deviceCombo = nullptr;
-    QSpinBox* m_virtualCount = nullptr;
-    QCheckBox* m_dryRun = nullptr;
-    QPlainTextEdit* m_output = nullptr;
-    QPushButton* m_refreshBtn = nullptr;
-    QPushButton* m_planBtn = nullptr;
-    QPushButton* m_testBtn = nullptr;
-    QPushButton* m_execBtn = nullptr;
+    QComboBox*    m_deviceCombo    = nullptr;
+    QSpinBox*     m_virtualCount   = nullptr;
+    QCheckBox*    m_dryRun         = nullptr;
+    QPlainTextEdit* m_output       = nullptr;
+    QPushButton*  m_refreshBtn     = nullptr;
+    QPushButton*  m_partitionsBtn  = nullptr;
+    QPushButton*  m_planBtn        = nullptr;
+    QPushButton*  m_testBtn        = nullptr;
+    QPushButton*  m_execBtn        = nullptr;
+    QProgressBar* m_progress       = nullptr;
 
     PartitionPlan m_lastPartitionPlan;
-    CommandPlan m_lastCommandPlan;
+    CommandPlan   m_lastCommandPlan;
 };
