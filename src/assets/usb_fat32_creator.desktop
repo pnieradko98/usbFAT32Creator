@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=USB FAT32 Creator
+Comment=Narzędzie do partycjonowania USB w FAT32
+Exec=usb_fat32_creator
+Icon=usb_fat32_creator
+Categories=Utility;
+Terminal=false
+StartupWMClass=usb_fat32_creator

@@ -129,12 +129,20 @@ jobs:
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes "Automatyczne paczki binarne" || true
           gh release upload "$TAG" "$ASSET" --clobber
 
-  build-linux-zip:
-    runs-on: ubuntu-latest
+  build-linux-appimage:
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 \
+            libgles2-mesa-dev libfuse2 patchelf
 
       - name: Install Qt 6 (Linux)
         uses: jurplel/install-qt-action@v4
@@ -162,43 +170,76 @@ jobs:
           set -euo pipefail
           cmake --build build --config Release --target usb_fat32_creator
 
-      - name: Create Linux zip package
+      - name: Download linuxdeploy tools
         shell: bash
         run: |
           set -euo pipefail
-          PACKAGE_DIR="dist/usb_fat32_creator_linux"
-          mkdir -p "$PACKAGE_DIR"
+          curl -sSfL -o linuxdeploy.AppImage \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          curl -sSfL -o linuxdeploy-plugin-qt.AppImage \
+            https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy.AppImage linuxdeploy-plugin-qt.AppImage
 
-          cp build/usb_fat32_creator "$PACKAGE_DIR/usb_fat32_creator"
-          chmod +x "$PACKAGE_DIR/usb_fat32_creator"
-
-          cat > "$PACKAGE_DIR/run.sh" << 'RUNSH'
-          #!/usr/bin/env bash
+      - name: Prepare AppDir
+        shell: bash
+        run: |
           set -euo pipefail
-          SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
-          exec "$SCRIPT_DIR/usb_fat32_creator" "$@"
-          RUNSH
-          chmod +x "$PACKAGE_DIR/run.sh"
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+          mkdir -p AppDir/usr/share/applications
 
-          cat > "$PACKAGE_DIR/README_PORTABLE.txt" << 'TXT'
-          USB FAT32 Creator - Linux package
+          cp build/usb_fat32_creator AppDir/usr/bin/usb_fat32_creator
+          chmod +x AppDir/usr/bin/usb_fat32_creator
 
-          Jak uruchomic:
-          1. Rozpakuj ZIP.
-          2. Uruchom ./run.sh lub ./usb_fat32_creator.
+          # Ikona — konwertujemy XPM na PNG za pomocą Qt lub ImageMagick
+          if command -v convert &>/dev/null; then
+            convert src/assets/app_icon.xpm AppDir/usr/share/icons/hicolor/256x256/apps/usb_fat32_creator.png
+          else
+            # Fallback: utwórz minimalną ikonę PNG
+            python3 -c "
+          import struct, zlib
+          def png_chunk(t,d): l=struct.pack('>I',len(d)); c=struct.pack('>I',zlib.crc32(t+d)&0xFFFFFFFF); return l+t+d+c
+          sig=b'\\x89PNG\\r\\n\\x1a\\n'
+          ihdr=png_chunk(b'IHDR',struct.pack('>IIBBBBB',32,32,8,2,0,0,0))
+          raw=b''.join(b'\\x00'+b'\\x00\\x55\\xaa'*32 for _ in range(32))
+          idat=png_chunk(b'IDAT',zlib.compress(raw))
+          iend=png_chunk(b'IEND',b'')
+          open('AppDir/usr/share/icons/hicolor/256x256/apps/usb_fat32_creator.png','wb').write(sig+ihdr+idat+iend)
+          "
+          fi
 
-          Uwaga:
-          - W niektorych dystrybucjach moze byc wymagany systemowy runtime Qt6.
-          - Operacje partycjonowania sa nieodwracalne i usuwaja dane.
-          TXT
+          # Plik .desktop
+          cp src/assets/usb_fat32_creator.desktop AppDir/usr/share/applications/usb_fat32_creator.desktop
 
-          (cd dist && zip -r "usb_fat32_creator_linux_portable.zip" "usb_fat32_creator_linux")
+      - name: Build AppImage
+        shell: bash
+        env:
+          QMAKE: ${{ env.Qt6_DIR }}/bin/qmake
+          QML_SOURCES_PATHS: .
+          EXTRA_QT_PLUGINS: xcbglintegrations
+        run: |
+          set -euo pipefail
+          export QMAKE="$(find "$GITHUB_WORKSPACE" "$GITHUB_WORKSPACE/.." "$RUNNER_WORKSPACE" -type f -name qmake6 -o -name qmake | head -n 1)"
+          ./linuxdeploy.AppImage \
+            --appdir AppDir \
+            --plugin qt \
+            --output appimage
+          # linuxdeploy generuje plik *.AppImage w bieżącym katalogu
+          ls -lh *.AppImage
+
+      - name: Rename and move AppImage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          mv *.AppImage dist/usb_fat32_creator_linux.AppImage
+          chmod +x dist/usb_fat32_creator_linux.AppImage
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
-          name: usb-fat32-creator-linux-portable
-          path: dist/usb_fat32_creator_linux_portable.zip
+          name: usb-fat32-creator-linux-appimage
+          path: dist/usb_fat32_creator_linux.AppImage
           if-no-files-found: error
 
       - name: Publish Linux release asset
@@ -209,6 +250,6 @@ jobs:
         run: |
           set -euo pipefail
           TAG="$GITHUB_REF_NAME"
-          ASSET="dist/usb_fat32_creator_linux_portable.zip"
+          ASSET="dist/usb_fat32_creator_linux.AppImage"
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --notes "Automatyczne paczki binarne" || true
           gh release upload "$TAG" "$ASSET" --clobber
