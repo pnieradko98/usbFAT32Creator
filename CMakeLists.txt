@@ -36,3 +36,6 @@ if(MSVC)
 else()
     target_compile_options(usb_fat32_creator PRIVATE -Wall -Wextra -Wpedantic)
 endif()
+
+enable_testing()
+add_subdirectory(tests)

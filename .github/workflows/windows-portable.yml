@@ -58,6 +58,18 @@ jobs:
         run: |
           cmake --build build --config Release --target usb_fat32_creator
 
+      - name: Build and run tests
+        shell: pwsh
+        run: |
+          cmake --build build --config Release --target tst_VirtualPenPlanner --target tst_CommandBuilder
+          if ($LASTEXITCODE -ne 0) { throw "Test build failed" }
+          # Add Qt bin directory to PATH so test executables can find Qt DLLs
+          if ($env:QT_ROOT_DIR -and (Test-Path $env:QT_ROOT_DIR)) {
+            $env:PATH = (Join-Path $env:QT_ROOT_DIR "bin") + ";" + $env:PATH
+          }
+          ctest --test-dir build --output-on-failure -C Release
+          if ($LASTEXITCODE -ne 0) { throw "Tests failed" }
+
       - name: Create portable package
         shell: pwsh
         run: |

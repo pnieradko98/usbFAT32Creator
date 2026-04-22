@@ -46,6 +46,13 @@ jobs:
           set -euo pipefail
           cmake --build build --config Release --target usb_fat32_creator
 
+      - name: Build and run tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build --config Release --target tst_VirtualPenPlanner --target tst_CommandBuilder
+          ctest --test-dir build --output-on-failure -C Release
+
       - name: Create macOS zip package
         shell: bash
         run: |
@@ -161,6 +168,13 @@ jobs:
         run: |
           set -euo pipefail
           cmake --build build --config Release --target usb_fat32_creator
+
+      - name: Build and run tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build --config Release --target tst_VirtualPenPlanner --target tst_CommandBuilder
+          ctest --test-dir build --output-on-failure -C Release
 
       - name: Create Linux zip package
         shell: bash
