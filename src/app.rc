@@ -4,5 +4,5 @@
 // ID 1 = RT_MANIFEST dla aplikacji EXE
 1 RT_MANIFEST "app.manifest"
 
-// Ikona aplikacji (opcjonalna - odkomentuj jezeli dodasz plik .ico)
-// IDI_ICON1 ICON "app.ico"
+// Ikona aplikacji EXE
+IDI_ICON1 ICON "assets/app.ico"

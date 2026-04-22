@@ -79,6 +79,7 @@ CommandPlan CommandBuilder::build(const PhysicalDisk& disk, const PartitionPlan&
 
         cp.commands.push_back("select disk " + diskNum);
         cp.commands.push_back("clean");
+        cp.commands.push_back("convert mbr");
         cp.commands.push_back("convert gpt");
 
         int idx = 1;

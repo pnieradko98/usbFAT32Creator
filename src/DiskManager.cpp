@@ -79,9 +79,17 @@ std::vector<DiskPartInfo> DiskManager::listPartitionsWindows(const QString& devi
     const QString diskNum = m.captured(1);
 
     const QString script = QString(
-        "Get-Partition -DiskNumber %1 -ErrorAction SilentlyContinue | "
-        "Select-Object PartitionNumber,DriveLetter,Size,Type | "
-        "ConvertTo-Csv -NoTypeInformation"
+        "Get-Partition -DiskNumber %1 -ErrorAction SilentlyContinue | ForEach-Object { "
+        "$p = $_; "
+        "$v = Get-Volume -Partition $p -ErrorAction SilentlyContinue; "
+        "[PSCustomObject]@{ "
+        "PartitionNumber = $p.PartitionNumber; "
+        "DriveLetter = $p.DriveLetter; "
+        "Size = $p.Size; "
+        "FileSystem = if($v){$v.FileSystem}else{''}; "
+        "Label = if($v){$v.FileSystemLabel}else{''} "
+        "} "
+        "} | ConvertTo-Csv -NoTypeInformation"
     ).arg(diskNum);
 
     const QString csv = runAndRead("powershell", {"-NoProfile", "-Command", script});
@@ -94,11 +102,12 @@ std::vector<DiskPartInfo> DiskManager::listPartitionsWindows(const QString& devi
         if (l.startsWith('"')) l = l.mid(1);
         if (l.endsWith('"')) l = l.left(l.size() - 1);
         const auto cols = l.split("\",\"");
-        if (cols.size() < 4) continue;
+        if (cols.size() < 5) continue;
 
         DiskPartInfo info;
         info.name = "Partition " + cols[0];
         info.fsType = cols[3].trimmed();
+        info.label = cols[4].trimmed();
         info.sizeBytes = cols[2].toULongLong();
         const QString dl = cols[1].trimmed();
         if (!dl.isEmpty() && dl.size() == 1 && dl[0].isLetter())

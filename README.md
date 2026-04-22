@@ -1,4 +1,4 @@
-# USB FAT32 Creator v1.1.0
+# USB FAT32 Creator v1.3.0
 
 Desktopowa aplikacja C++/Qt do bezpiecznego planowania i przygotowania podziału fizycznych nośników USB.
 
@@ -11,7 +11,7 @@ Główna idea:
 
 To narzędzie operuje na fizycznych dyskach. Traktuj je jak narzędzie administracyjne.
 
-- Domyślnie aplikacja działa w trybie `dry-run`.
+- Aplikacja wykonuje operacje dopiero po wyraźnym potwierdzeniu użytkownika.
 - Operacje partycjonowania i formatowania usuwają dane.
 - Przed wykonaniem pojawia się wyraźne ostrzeżenie o nieodwracalności zmian.
 - Zalecany workflow: `Testuj` -> `Zbuduj plan` -> `Wykonaj`.

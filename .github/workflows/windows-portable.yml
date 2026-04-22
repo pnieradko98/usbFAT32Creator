@@ -95,7 +95,7 @@ jobs:
             "Jak uruchomic:",
             "1. Rozpakuj ZIP do dowolnego folderu.",
             "2. Uruchom usb_fat32_creator.exe jako Administrator.",
-            "3. Najpierw uzyj przycisku Testuj i trybu dry-run.",
+            "3. Najpierw uzyj przycisku Testuj i zweryfikuj plan.",
             "",
             "Uwaga:",
             "- Operacje partycjonowania sa nieodwracalne i usuwaja dane."
